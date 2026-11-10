@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Tempo
+Name[fr]=Tempo
+Comment=A timer, alarm and stopwatch app for GNOME
+Comment[fr]=Une application de minuteur, réveil et chronomètre pour GNOME
+Exec=tempo
+Icon=org.example.Tempo
+Terminal=false
+Type=Application
+Categories=Utility;Clock;
+Keywords=Clock;Timer;Alarm;Stopwatch;
+StartupNotify=true
+DBusActivatable=true

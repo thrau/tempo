@@ -1,0 +1,14 @@
+# Rust / Cargo
+/target
+**/*.rs.bk
+
+# Meson / ninja build dirs
+_build/
+build/
+builddir/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

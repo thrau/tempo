@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Placeholder app icon: a simple clock. Replace with a proper branded icon. -->
+  <circle cx="64" cy="64" r="56" fill="#3584e4"/>
+  <circle cx="64" cy="64" r="44" fill="#ffffff"/>
+  <path d="M64 36 L64 64 L84 78" stroke="#3584e4" stroke-width="6" stroke-linecap="round" fill="none"/>
+</svg>

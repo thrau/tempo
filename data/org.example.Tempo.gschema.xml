@@ -1,0 +1,9 @@
+# GSettings schema for app preferences.
+# This is a minimal placeholder; expand with keys for timer presets, etc.
+{
+  "id" : "org.example.Tempo",
+  "path" : "/org/example/Tempo/",
+  "children" : [ ],
+  "actions" : { },
+  "gettext-domain" : "tempo"
+}

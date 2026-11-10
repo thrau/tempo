@@ -1,0 +1,12 @@
+# Template for new translations. To add a language:
+#   cd po
+#   msginit --locale=fr --input=tempo.pot
+# Then translate the strings and run meson to build.
+
+msgid ""
+msgstr ""
+"Project-Id-Version: tempo 0.1.0\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
