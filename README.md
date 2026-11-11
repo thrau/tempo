@@ -4,7 +4,7 @@ A minimalist desktop clock app for GNOME, written in Rust with GTK4 and
 libadwaita. Native controls and automatic light/dark styling keep it at home on
 your desktop.
 
-<img width="2188" height="897" alt="tempo" src="https://github.com/user-attachments/assets/74b4502c-a493-416f-abdc-a525e45a31b8" />
+<img width="1926" height="724" alt="tempo" src="https://github.com/user-attachments/assets/279f418b-877b-4aaa-a055-cfca195d9bb8" />
 
 
 ## Features
