@@ -537,10 +537,13 @@ fn countdown_row(
     list: &gtk::ListBox,
     title: String,
     mut model: Countdown,
+    autostart: bool,
     notifier: Notifier,
     on_delete: Option<Box<dyn Fn() + 'static>>,
 ) {
-    model.start(Instant::now());
+    if autostart {
+        model.start(Instant::now());
+    }
     let model = Rc::new(RefCell::new(model));
     let (row, content, header) = row(list, &title, on_delete);
     // Countdown cards share one horizontal row instead of reserving a
@@ -685,6 +688,7 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
                 &list,
                 config.name,
                 Countdown::Timer(Timer::new(duration)),
+                true,
                 n.clone(),
                 Some(Box::new(move || delete_store.remove_timer(id))),
             );
@@ -719,6 +723,7 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
                     Duration::from_secs(config.focus_seconds),
                     Duration::from_secs(config.break_seconds),
                 )),
+                true,
                 notifier.clone(),
                 Some(Box::new(move || delete_store.remove_cycle(id))),
             );
@@ -734,13 +739,15 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
                 &list,
                 config.name,
                 Countdown::Timer(Timer::new(duration)),
+                true,
                 notifier.clone(),
                 Some(Box::new(move || delete_store.remove_timer(id))),
             );
         }
         entry.set_text("");
     });
-    // Restore persisted items (timers or cycles depending on the panel).
+    // Restore base configurations reset and paused; only explicit creation
+    // or the play button should start a countdown.
     if cycles {
         for cycle in populate_store.config().borrow().cycles.clone() {
             let id = cycle.id;
@@ -752,6 +759,7 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
                     Duration::from_secs(cycle.focus_seconds),
                     Duration::from_secs(cycle.break_seconds),
                 )),
+                false,
                 populate_notifier.clone(),
                 Some(Box::new(move || delete_store.remove_cycle(id))),
             );
@@ -764,6 +772,7 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
                 &populate_list,
                 timer.name,
                 Countdown::Timer(Timer::new(Duration::from_secs(timer.seconds))),
+                false,
                 populate_notifier.clone(),
                 Some(Box::new(move || delete_store.remove_timer(id))),
             );

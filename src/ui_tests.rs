@@ -209,6 +209,47 @@ fn native_window_create_pause_reset_delete() {
             "deleting the last item reopens the form"
         );
     }
+    // Loading saved configurations must not start countdowns. Restore both
+    // types through the same panel construction path used at app startup.
+    let store = crate::storage::Store::load();
+    let saved_timer = store.add_timer(crate::storage::TimerConfig {
+        id: 0,
+        name: "Saved timer".into(),
+        seconds: 300,
+    });
+    let saved_cycle = store.add_cycle(crate::storage::CycleConfig {
+        id: 0,
+        name: "Saved cycle".into(),
+        focus_seconds: 1500,
+        break_seconds: 300,
+    });
+    let overlay = descendants::<adw::ToastOverlay>(&window).remove(0);
+    let notifier = crate::notifications::Notifier::new(app.upcast_ref(), &overlay);
+    for (cycles, time, status) in [
+        (false, "05:00", "Paused · 05:00 total"),
+        (true, "25:00", "Focus · Paused · 25:00 focus / 05:00 break"),
+    ] {
+        let panel = crate::panels::timers(notifier.clone(), crate::storage::Store::load(), cycles);
+        let list = schedules(&panel);
+        let row = list.row_at_index(0).unwrap();
+        let labels = descendants::<gtk::Label>(&row);
+        assert!(labels
+            .iter()
+            .any(|label| { label.has_css_class("countdown") && label.text() == time }));
+        assert!(labels.iter().any(|label| label.text() == status));
+        assert!(!descendants::<gtk::Button>(&row)
+            .iter()
+            .any(|button| button.tooltip_text().as_deref() == Some("Pause")));
+        icon_click(&row, "Start / resume");
+        icon_click(&row, "Pause");
+        icon_click(&row, "Reset");
+        assert!(descendants::<gtk::Label>(&row)
+            .iter()
+            .any(|label| { label.has_css_class("countdown") && label.text() == time }));
+    }
+    store.remove_timer(saved_timer.id);
+    store.remove_cycle(saved_cycle.id);
+
     // Closing hides the existing window without destroying schedules or
     // stopping the main-loop countdown updates. Reopening must reuse it.
     let timers = stack.child_by_name("timers").unwrap();
