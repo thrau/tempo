@@ -1,5 +1,14 @@
 /* Let Adwaita supply native light/dark colors, controls, and focus rings. */
-window.tempo .composer { padding: 18px; }
+window.tempo .composer { padding: 12px 16px; }
+/* Use one surface for the header and expanded form, in either color scheme. */
+window.tempo .composer-card { background-color: @card_bg_color; }
+window.tempo .composer-expander,
+window.tempo .composer-expander list {
+    background-color: transparent;
+}
+window.tempo .composer-expander .title {
+    font-weight: 600;
+}
 window.tempo .schedule { padding: 16px 18px; }
 window.tempo .countdown {
     font-size: 36px;

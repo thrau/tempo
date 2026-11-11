@@ -1,5 +1,5 @@
 //! Native widget smoke test. Skipped when no display server is available.
-use gtk::prelude::*;
+use adw::prelude::*;
 
 fn descendants<T: IsA<gtk::Widget> + Clone + 'static>(widget: &impl IsA<gtk::Widget>) -> Vec<T> {
     let widget = widget.as_ref();
@@ -13,6 +13,12 @@ fn descendants<T: IsA<gtk::Widget> + Clone + 'static>(widget: &impl IsA<gtk::Wid
         child = widget.next_sibling();
     }
     found
+}
+fn schedules(widget: &impl IsA<gtk::Widget>) -> gtk::ListBox {
+    descendants::<gtk::ListBox>(widget)
+        .into_iter()
+        .find(|list| list.has_css_class("schedules"))
+        .unwrap()
 }
 fn click(widget: &impl IsA<gtk::Widget>, label: &str) {
     descendants::<gtk::Button>(widget)
@@ -73,10 +79,11 @@ fn native_window_create_pause_reset_delete() {
             let clamp = descendants::<adw::Clamp>(&panel).remove(0);
             let entry = descendants::<gtk::Entry>(&panel).remove(0);
             let form = entry.parent().unwrap();
-            let list = descendants::<gtk::ListBox>(&panel).remove(0);
-            let expander = descendants::<gtk::Expander>(&panel).remove(0);
+            let list = schedules(&panel);
+            let expander = descendants::<adw::ExpanderRow>(&panel).remove(0);
             assert!(expander.is_expanded());
-            assert_eq!(expander.child().unwrap(), form);
+            assert!(form.is_ancestor(&expander));
+            assert!(expander.parent().unwrap().has_css_class("boxed-list"));
             let sizes = (clamp.child().unwrap().width(), form.width(), list.width());
             assert!(sizes.0 > 0 && sizes.1 > 0 && sizes.2 > 0);
             if let Some(expected) = expected {
@@ -115,8 +122,8 @@ fn native_window_create_pause_reset_delete() {
     }
     let alarms = stack.child_by_name("alarms").unwrap();
     click(&alarms, "Add alarm");
-    let list = descendants::<gtk::ListBox>(&alarms).remove(0);
-    let expander = descendants::<gtk::Expander>(&alarms).remove(0);
+    let list = schedules(&alarms);
+    let expander = descendants::<adw::ExpanderRow>(&alarms).remove(0);
     assert!(list.row_at_index(0).is_some());
     assert!(
         !expander.is_expanded(),
@@ -135,8 +142,8 @@ fn native_window_create_pause_reset_delete() {
 
     for (page, action) in [("timers", "Start timer"), ("cycles", "Start cycle")] {
         let panel = stack.child_by_name(page).unwrap();
-        let list = descendants::<gtk::ListBox>(&panel).remove(0);
-        let expander = descendants::<gtk::Expander>(&panel).remove(0);
+        let list = schedules(&panel);
+        let expander = descendants::<adw::ExpanderRow>(&panel).remove(0);
         assert!(
             expander.is_expanded(),
             "empty panels show the creation form"
@@ -193,7 +200,7 @@ fn native_window_create_pause_reset_delete() {
     inputs[1].set_value(0.0);
     inputs[2].set_value(5.0);
     click(&timers, "Start timer");
-    let list = descendants::<gtk::ListBox>(&timers).remove(0);
+    let list = schedules(&timers);
     let original_row = list.row_at_index(0).unwrap();
     window.present();
     assert!(window.property::<bool>("hide-on-close"));

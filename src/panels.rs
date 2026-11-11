@@ -2,7 +2,7 @@
 use crate::{
     alarm::Alarm, cycle::Cycle, notifications::Notifier, storage, timer::Timer,
 };
-use gtk::prelude::*;
+use adw::prelude::*;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -43,23 +43,30 @@ fn panel(
         content.append(&quick);
     }
     let form = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    form.add_css_class("card");
     form.add_css_class("composer");
     let expander = creation_label.map(|title| {
-        let expander = gtk::Expander::builder()
-            .label(title)
+        let expander = adw::ExpanderRow::builder()
+            .title(title)
             .expanded(true)
-            .child(&form)
             .build();
-        content.append(&expander);
+        expander.add_css_class("composer-expander");
+        expander.add_row(&form);
+        let card = gtk::ListBox::new();
+        card.set_selection_mode(gtk::SelectionMode::None);
+        card.add_css_class("boxed-list");
+        card.add_css_class("composer-card");
+        card.append(&expander);
+        content.append(&card);
         expander
     });
     if expander.is_none() {
+        form.add_css_class("card");
         content.append(&form);
     }
     let list = gtk::ListBox::new();
     list.set_selection_mode(gtk::SelectionMode::None);
     list.add_css_class("boxed-list");
+    list.add_css_class("schedules");
     let placeholder = label(empty, "dim-label");
     placeholder.set_margin_top(24);
     placeholder.set_margin_bottom(24);
