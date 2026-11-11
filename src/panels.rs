@@ -1,5 +1,7 @@
 //! Small native GTK panels; each row owns its session-only schedule.
-use crate::{alarm::Alarm, cycle::Cycle, notifications::Notifier, timer::Timer};
+use crate::{
+    alarm::Alarm, cycle::Cycle, notifications::Notifier, storage, timer::Timer,
+};
 use gtk::prelude::*;
 use std::{
     cell::RefCell,
@@ -24,6 +26,7 @@ fn panel(
     subtitle: &str,
     empty: &str,
     creation_label: Option<&str>,
+    quick: Option<gtk::Widget>,
 ) -> (gtk::Widget, gtk::Box, gtk::ListBox) {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 20);
     content.set_margin_top(24);
@@ -36,6 +39,9 @@ fn panel(
     sub.set_wrap(true);
     heading.append(&sub);
     content.append(&heading);
+    if let Some(quick) = quick {
+        content.append(&quick);
+    }
     let form = gtk::Box::new(gtk::Orientation::Vertical, 12);
     form.add_css_class("card");
     form.add_css_class("composer");
@@ -161,7 +167,11 @@ fn create_button(form: &gtk::Box, text: &str) -> gtk::Button {
     form.append(&button);
     button
 }
-fn row(list: &gtk::ListBox, title: &str) -> (gtk::ListBoxRow, gtk::Box) {
+fn row(
+    list: &gtk::ListBox,
+    title: &str,
+    on_delete: Option<Box<dyn Fn() + 'static>>,
+) -> (gtk::ListBoxRow, gtk::Box) {
     let row = gtk::ListBoxRow::new();
     row.set_activatable(false);
     let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
@@ -183,15 +193,19 @@ fn row(list: &gtk::ListBox, title: &str) -> (gtk::ListBoxRow, gtk::Box) {
         if let (Some(list), Some(row)) = (weak_list.upgrade(), weak_row.upgrade()) {
             list.remove(&row);
         }
+        if let Some(on_delete) = on_delete.as_ref() {
+            on_delete();
+        }
     });
     (row, content)
 }
 
-pub fn alarms(notifier: Notifier) -> gtk::Widget {
+pub fn alarms(notifier: Notifier, store: storage::Store) -> gtk::Widget {
     let (panel, form, list) = panel(
         "Alarms",
         "A gentle reminder, right on time.",
         "No alarms yet. Make time for something.",
+        None,
         None,
     );
     let entry = name_entry("Name (optional)");
@@ -207,85 +221,126 @@ pub fn alarms(notifier: Notifier) -> gtk::Widget {
     form.append(&time);
     form.append(&entry);
     let add = create_button(&form, "Add alarm");
+    let n = notifier.clone();
+    let s = store.clone();
+    let populate_list = list.clone();
     add.connect_clicked(move |_| {
         hour.update();
         minute.update();
-        let result = glib::DateTime::now_local()
-            .and_then(|now| Alarm::new(hour.value_as_int(), minute.value_as_int(), &now));
-        let alarm = match result {
-            Ok(alarm) => alarm,
-            Err(_) => {
-                notifier.message("Unable to schedule that local time.");
-                return;
-            }
-        };
-        let title = name(&entry, "Alarm");
-        let (row, content) = row(&list, &title);
-        let line = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        let clock = label(
-            &format!("{:02}:{:02}", alarm.hour, alarm.minute),
-            "countdown",
-        );
-        clock.set_hexpand(true);
-        line.append(&clock);
-        let enabled = gtk::Switch::builder()
-            .active(true)
-            .valign(gtk::Align::Center)
-            .tooltip_text("Enable alarm")
-            .build();
-        line.append(&enabled);
-        content.append(&line);
-        let status = label(&alarm_status(&alarm), "dim-label");
-        content.append(&status);
-        let model = Rc::new(RefCell::new(alarm));
-        let m = model.clone();
-        let s = status.clone();
-        let n = notifier.clone();
-        let weak_row = row.downgrade();
-        enabled.connect_active_notify(move |switch| {
-            let mut model = m.borrow_mut();
-            if switch.is_active() {
-                if glib::DateTime::now_local()
-                    .and_then(|now| model.enable(&now))
-                    .is_err()
-                {
-                    // Defer the switch update to avoid re-entering this borrow.
-                    let weak = switch.downgrade();
-                    glib::idle_add_local_once(move || {
-                        if let Some(s) = weak.upgrade() {
-                            s.set_active(false);
-                        }
-                    });
-                    n.message("Unable to schedule that local time.");
-                }
+        if glib::DateTime::now_local()
+            .and_then(|now| Alarm::new(hour.value_as_int(), minute.value_as_int(), &now))
+            .is_err()
+        {
+            n.message("Unable to schedule that local time.");
+            return;
+        }
+        let config = s.add_alarm(storage::AlarmConfig {
+            id: 0,
+            name: name(&entry, "Alarm"),
+            hour: hour.value_as_int(),
+            minute: minute.value_as_int(),
+            enabled: true,
+        });
+        add_alarm_row(&list, &config, n.clone(), s.clone());
+        entry.set_text("");
+    });
+    // Restore persisted alarms.
+    for config in store.config().borrow().alarms.clone() {
+        add_alarm_row(&populate_list, &config, notifier.clone(), store.clone());
+    }
+    panel
+}
+
+/// Build one alarm row and keep it in sync with the store.
+fn add_alarm_row(
+    list: &gtk::ListBox,
+    config: &storage::AlarmConfig,
+    notifier: Notifier,
+    store: storage::Store,
+) {
+    let Some(mut alarm) = glib::DateTime::now_local()
+        .and_then(|now| Alarm::new(config.hour, config.minute, &now))
+        .ok()
+    else {
+        return;
+    };
+    alarm.enabled = config.enabled;
+    let title = config.name.clone();
+    let id = config.id;
+    let delete_store = store.clone();
+    let (row, content) = row(
+        list,
+        &title,
+        Some(Box::new(move || delete_store.remove_alarm(id))),
+    );
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    let clock = label(
+        &format!("{:02}:{:02}", alarm.hour, alarm.minute),
+        "countdown",
+    );
+    clock.set_hexpand(true);
+    line.append(&clock);
+    let enabled = gtk::Switch::builder()
+        .active(config.enabled)
+        .valign(gtk::Align::Center)
+        .tooltip_text("Enable alarm")
+        .build();
+    line.append(&enabled);
+    content.append(&line);
+    let status = label(&alarm_status(&alarm), "dim-label");
+    content.append(&status);
+    let model = Rc::new(RefCell::new(alarm));
+    let s = status.clone();
+    let m = model.clone();
+    let n = notifier.clone();
+    let toggle_store = store.clone();
+    let weak_row = row.downgrade();
+    enabled.connect_active_notify(move |switch| {
+        let mut model = m.borrow_mut();
+        if switch.is_active() {
+            if glib::DateTime::now_local()
+                .and_then(|now| model.enable(&now))
+                .is_err()
+            {
+                // Defer the switch update to avoid re-entering this borrow.
+                let weak = switch.downgrade();
+                glib::idle_add_local_once(move || {
+                    if let Some(s) = weak.upgrade() {
+                        s.set_active(false);
+                    }
+                });
+                n.message("Unable to schedule that local time.");
+            } else {
                 if let Some(row) = weak_row.upgrade() {
                     row.remove_css_class("triggered");
                 }
                 s.set_text(&alarm_status(&model));
-            } else {
-                model.enabled = false;
-                s.set_text("Off · enable to schedule again");
+                toggle_store.set_alarm_enabled(id, true);
             }
-        });
-        let weak_row = row.downgrade();
-        let n = notifier.clone();
-        glib::timeout_add_local(Duration::from_millis(250), move || {
-            let Some(row) = weak_row.upgrade() else {
-                return glib::ControlFlow::Break;
-            };
-            let fired =
-                glib::DateTime::now_local().is_ok_and(|now| model.borrow_mut().tick(now.to_unix()));
-            if fired {
-                enabled.set_active(false);
-                status.set_text("Alarm rang · enable to schedule again");
-                row.add_css_class("triggered");
-                n.alert(&title, "It's time.");
-            }
-            glib::ControlFlow::Continue
-        });
-        entry.set_text("");
+        } else {
+            model.enabled = false;
+            s.set_text("Off · enable to schedule again");
+            toggle_store.set_alarm_enabled(id, false);
+        }
     });
-    panel
+    let weak_row = row.downgrade();
+    let n = notifier.clone();
+    let fire_store = store.clone();
+    glib::timeout_add_local(Duration::from_millis(250), move || {
+        let Some(row) = weak_row.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let fired =
+            glib::DateTime::now_local().is_ok_and(|now| model.borrow_mut().tick(now.to_unix()));
+        if fired {
+            enabled.set_active(false);
+            status.set_text("Alarm rang · enable to schedule again");
+            row.add_css_class("triggered");
+            fire_store.set_alarm_enabled(id, false);
+            n.alert(&title, "It's time.");
+        }
+        glib::ControlFlow::Continue
+    });
 }
 fn alarm_status(alarm: &Alarm) -> String {
     glib::DateTime::from_unix_local(alarm.due)
@@ -378,10 +433,16 @@ fn refresh(model: &Countdown, clock: &gtk::Label, status: &gtk::Label, toggle: &
         "Start / resume"
     }));
 }
-fn countdown_row(list: &gtk::ListBox, title: String, mut model: Countdown, notifier: Notifier) {
+fn countdown_row(
+    list: &gtk::ListBox,
+    title: String,
+    mut model: Countdown,
+    notifier: Notifier,
+    on_delete: Option<Box<dyn Fn() + 'static>>,
+) {
     model.start(Instant::now());
     let model = Rc::new(RefCell::new(model));
-    let (row, content) = row(list, &title);
+    let (row, content) = row(list, &title, on_delete);
     let clock = label("", "countdown");
     content.append(&clock);
     let status = label("", "dim-label");
@@ -443,13 +504,29 @@ fn countdown_row(list: &gtk::ListBox, title: String, mut model: Countdown, notif
     });
 }
 
-pub fn timers(notifier: Notifier, cycles: bool) -> gtk::Widget {
+pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::Widget {
+    // Quick-create buttons (timers only), wired to the list once it exists.
+    let mut quick_buttons: Vec<(gtk::Button, u64)> = Vec::new();
+    let quick: Option<gtk::Widget> = if cycles {
+        None
+    } else {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.set_halign(gtk::Align::Center);
+        for minutes in [3u64, 5, 10, 15, 30, 50] {
+            let button = gtk::Button::with_label(&format!("{minutes} min"));
+            button.set_tooltip_text(Some(&format!("Start a {minutes} minute timer")));
+            row.append(&button);
+            quick_buttons.push((button, minutes));
+        }
+        Some(row.upcast())
+    };
     let (panel, form, list) = if cycles {
         panel(
             "Cycles",
             "Find your rhythm. Focus, rest, repeat.",
             "Your next focus session starts here.",
             Some("New cycle"),
+            None,
         )
     } else {
         panel(
@@ -457,6 +534,7 @@ pub fn timers(notifier: Notifier, cycles: bool) -> gtk::Widget {
             "A little space for the things that take time.",
             "No timers running. Start one above.",
             Some("New timer"),
+            quick,
         )
     };
     let entry = name_entry(if cycles {
@@ -471,7 +549,35 @@ pub fn timers(notifier: Notifier, cycles: bool) -> gtk::Widget {
     );
     let break_time = cycles.then(|| DurationInput::new(&form, "Break", 5.0));
     form.append(&entry);
+    // Wire quick-create buttons, each starting (and storing) a timer.
+    for (button, minutes) in quick_buttons {
+        let list = list.clone();
+        let entry = entry.clone();
+        let n = notifier.clone();
+        let store = store.clone();
+        button.connect_clicked(move |_| {
+            let config = store.add_timer(storage::TimerConfig {
+                id: 0,
+                name: "Timer".into(),
+                seconds: minutes * 60,
+            });
+            let duration = Duration::from_secs(config.seconds);
+            let id = config.id;
+            let delete_store = store.clone();
+            countdown_row(
+                &list,
+                config.name,
+                Countdown::Timer(Timer::new(duration)),
+                n.clone(),
+                Some(Box::new(move || delete_store.remove_timer(id))),
+            );
+            entry.set_text("");
+        });
+    }
     let add = create_button(&form, if cycles { "Start cycle" } else { "Start timer" });
+    let populate_notifier = notifier.clone();
+    let populate_store = store.clone();
+    let populate_list = list.clone();
     add.connect_clicked(move |_| {
         let duration = duration.duration();
         let rest = break_time.as_ref().map(DurationInput::duration);
@@ -480,12 +586,71 @@ pub fn timers(notifier: Notifier, cycles: bool) -> gtk::Widget {
             return;
         }
         let title = name(&entry, if cycles { "One Pomodoro" } else { "Timer" });
-        let model = match rest {
-            Some(rest) => Countdown::Cycle(Cycle::new(duration, rest)),
-            None => Countdown::Timer(Timer::new(duration)),
-        };
-        countdown_row(&list, title, model, notifier.clone());
+        if let Some(rest) = rest {
+            let config = store.add_cycle(storage::CycleConfig {
+                id: 0,
+                name: title,
+                focus_seconds: duration.as_secs(),
+                break_seconds: rest.as_secs(),
+            });
+            let id = config.id;
+            let delete_store = store.clone();
+            countdown_row(
+                &list,
+                config.name,
+                Countdown::Cycle(Cycle::new(
+                    Duration::from_secs(config.focus_seconds),
+                    Duration::from_secs(config.break_seconds),
+                )),
+                notifier.clone(),
+                Some(Box::new(move || delete_store.remove_cycle(id))),
+            );
+        } else {
+            let config = store.add_timer(storage::TimerConfig {
+                id: 0,
+                name: title,
+                seconds: duration.as_secs(),
+            });
+            let id = config.id;
+            let delete_store = store.clone();
+            countdown_row(
+                &list,
+                config.name,
+                Countdown::Timer(Timer::new(duration)),
+                notifier.clone(),
+                Some(Box::new(move || delete_store.remove_timer(id))),
+            );
+        }
         entry.set_text("");
     });
+    // Restore persisted items (timers or cycles depending on the panel).
+    if cycles {
+        for cycle in populate_store.config().borrow().cycles.clone() {
+            let id = cycle.id;
+            let delete_store = populate_store.clone();
+            countdown_row(
+                &populate_list,
+                cycle.name,
+                Countdown::Cycle(Cycle::new(
+                    Duration::from_secs(cycle.focus_seconds),
+                    Duration::from_secs(cycle.break_seconds),
+                )),
+                populate_notifier.clone(),
+                Some(Box::new(move || delete_store.remove_cycle(id))),
+            );
+        }
+    } else {
+        for timer in populate_store.config().borrow().timers.clone() {
+            let id = timer.id;
+            let delete_store = populate_store.clone();
+            countdown_row(
+                &populate_list,
+                timer.name,
+                Countdown::Timer(Timer::new(Duration::from_secs(timer.seconds))),
+                populate_notifier.clone(),
+                Some(Box::new(move || delete_store.remove_timer(id))),
+            );
+        }
+    }
     panel
 }

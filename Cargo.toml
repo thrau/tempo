@@ -13,6 +13,10 @@ gtk = { package = "gtk4", version = "0.9" }
 adw = { package = "libadwaita", version = "0.7", features = ["v1_5"] }
 glib = "0.20"
 gio = "0.20" # gtk4 0.9 pairs with glib/gio 0.20
+
+# Configuration persistence (~/.config/tempo/config.json)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 ksni = { version = "0.3.7", default-features = false, features = ["async-io"] }
 async-channel = "2"
 x11rb = "0.13"

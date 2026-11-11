@@ -18,18 +18,19 @@ impl TempoWindow {
         let obj: Self = glib::Object::builder().property("application", app).build();
         let imp = obj.imp();
         let notifier = crate::notifications::Notifier::new(app.as_ref(), &imp.overlay);
+        let store = crate::storage::Store::load();
         imp.pages.add_titled(
-            &crate::panels::alarms(notifier.clone()),
+            &crate::panels::alarms(notifier.clone(), store.clone()),
             Some("alarms"),
             "Alarms",
         );
         imp.pages.add_titled(
-            &crate::panels::timers(notifier.clone(), false),
+            &crate::panels::timers(notifier.clone(), store.clone(), false),
             Some("timers"),
             "Timers",
         );
         imp.pages.add_titled(
-            &crate::panels::timers(notifier, true),
+            &crate::panels::timers(notifier, store, true),
             Some("cycles"),
             "Cycles",
         );

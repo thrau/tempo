@@ -37,6 +37,13 @@ fn native_window_create_pause_reset_delete() {
     }
     adw::init().unwrap();
     gio::resources_register_include!("tempo.gresource").unwrap();
+    // Serialize against storage tests that also set the shared env override.
+    let _config_lock = crate::storage::test_lock();
+    // Point persistence at a throwaway file so the test never touches ~/.config.
+    std::env::set_var(
+        "TEMPO_CONFIG_FILE",
+        std::env::temp_dir().join(format!("tempo-ui-{}.json", std::process::id())),
+    );
     let app = crate::application::TempoApplication::new();
     app.set_flags(gio::ApplicationFlags::NON_UNIQUE);
     app.register(gio::Cancellable::NONE).unwrap();
