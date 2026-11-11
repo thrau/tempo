@@ -23,10 +23,30 @@ than zero. Countdown deadlines use a monotonic clock rather than subtracting a
 second on each UI update. Delayed cycle updates preserve the schedule and
 coalesce missed transitions into one alert for the current phase.
 
-**Keep Tempo open to receive alerts.** Schedules are currently session-only:
-closing the app stops them and discards them. Tempo does not wake a suspended
-computer. Desktop notification delivery and audio depend on your desktop's
-notification, sound, and Do Not Disturb settings.
+**Closing the window hides Tempo to the system tray.** Alarms, timers, and
+cycles keep running in the background. Click the tray icon or its **Show Tempo**
+menu item to reopen the same window. Launching Tempo again also reopens it.
+Use **File → Quit**, **Ctrl+Q**, or the tray's **Quit** menu item to actually exit.
+Schedules are session-only: quitting stops and discards them.
+
+Tempo automatically supports both common Linux tray protocols:
+
+- **StatusNotifierItem/AppIndicator** on modern desktops (X11 or Wayland).
+- **Legacy X11/XEmbed** when no SNI host is available, including MATE's standard
+  notification area. No extra panel applet is needed on those desktops.
+
+Left-click the legacy icon to show Tempo; right-click it for **Show Tempo** and
+**Quit**. The legacy icon follows panel resizing and reconnects if the panel
+restarts. If an SNI host becomes available, Tempo removes the legacy icon to
+avoid duplicates; it falls back again if that host disappears.
+
+GNOME Shell does not provide either tray protocol by default, so it still needs
+a tray-support extension. If neither type of tray host exists, Tempo continues
+running in the background; launch it again to reopen the window and use
+File → Quit to exit.
+
+Tempo does not wake a suspended computer. Desktop notification delivery and
+audio depend on your desktop's notification, sound, and Do Not Disturb settings.
 
 ## Prerequisites
 
@@ -71,14 +91,19 @@ cargo clippy --all-targets -- -D warnings
 
 Tests cover alarm scheduling and one-shot firing, countdown completion and
 pause/resume/reset behavior, cycle boundaries and delayed updates, and native
-widget creation/control/deletion. The GTK smoke test skips itself if no display
-server is available.
+widget creation/control/deletion, hide/reopen/background timing, and explicit
+quit behavior. Tray tests cover icon data, Show/Quit action routing, backend
+switching, XEmbed docking/cleanup, and popup hit testing. The GTK smoke test
+skips itself if no display server is available; the XEmbed protocol test also
+requires an X11 display.
 
 ## Project layout
 
 - `src/alarm.rs`, `src/timer.rs`, `src/cycle.rs`: scheduling models and unit tests.
 - `src/panels.rs`: alarm, timer, and cycle forms and schedule rows.
 - `src/notifications.rs`: desktop notifications, toasts, and audio playback.
+- `src/tray.rs`: StatusNotifierItem icon, tray menu, and main-thread action routing.
+- `src/tray_x11.rs`: legacy XEmbed icon and popup menu fallback.
 - `src/window/`, `src/application/`: GTK/Adwaita window and app lifecycle.
 - `data/resources/`: window template, styling, and original synthesized chime.
 - `src/stopwatch.rs`: reserved skeleton, not currently exposed in the UI.

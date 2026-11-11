@@ -2,6 +2,7 @@
 
 mod imp;
 
+use glib::subclass::prelude::ObjectSubclassIsExt;
 use gtk::prelude::*;
 
 use crate::window::TempoWindow;
@@ -18,10 +19,16 @@ impl TempoApplication {
         glib::Object::builder().build()
     }
 
+    pub(crate) fn stop_tray(&self) {
+        self.imp().stop_tray();
+    }
+
     /// Create (or focus) the main window and present it.
     fn show_window(&self) {
         // Reuse an existing window if one is already open.
-        if let Some(window) = self.active_window() {
+        // Hidden windows may no longer be the active window. Reuse the same
+        // window so reopening from the tray never discards its schedules.
+        if let Some(window) = self.windows().into_iter().next() {
             window.present();
             return;
         }

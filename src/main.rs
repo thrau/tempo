@@ -2,6 +2,8 @@
 
 mod application;
 mod config;
+mod tray;
+mod tray_x11;
 #[cfg(test)]
 mod ui_tests;
 mod window;

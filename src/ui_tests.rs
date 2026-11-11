@@ -82,17 +82,42 @@ fn native_window_create_pause_reset_delete() {
     for (page, action) in [("timers", "Start timer"), ("cycles", "Start cycle")] {
         let panel = stack.child_by_name(page).unwrap();
         let list = descendants::<gtk::ListBox>(&panel).remove(0);
+        let expander = descendants::<gtk::Expander>(&panel).remove(0);
+        assert!(
+            expander.is_expanded(),
+            "empty panels show the creation form"
+        );
         let inputs = descendants::<gtk::SpinButton>(&panel);
         for input in &inputs {
             input.set_value(0.0);
         }
         click(&panel, action);
         assert!(list.row_at_index(0).is_none(), "reject zero durations");
+        assert!(expander.is_expanded(), "invalid input leaves the form open");
         for input in &inputs {
             input.set_value(1.0);
         }
         click(&panel, action);
         assert!(list.row_at_index(0).is_some());
+        assert!(
+            !expander.is_expanded(),
+            "creating an item collapses the form"
+        );
+        expander.set_expanded(true);
+        click(&panel, action);
+        assert!(
+            list.row_at_index(1).is_some(),
+            "the form can add another item"
+        );
+        assert!(!expander.is_expanded());
+        let second = list.row_at_index(1).unwrap();
+        expander.set_expanded(true);
+        icon_click(&second, "Delete");
+        assert!(
+            expander.is_expanded(),
+            "deletion preserves a manually opened form"
+        );
+        expander.set_expanded(false);
         icon_click(&list, "Pause");
         icon_click(&list, "Start / resume");
         icon_click(&list, "Reset");
@@ -101,6 +126,51 @@ fn native_window_create_pause_reset_delete() {
             .any(|b| b.tooltip_text().as_deref() == Some("Start / resume")));
         icon_click(&list, "Delete");
         assert!(list.row_at_index(0).is_none());
+        assert!(
+            expander.is_expanded(),
+            "deleting the last item reopens the form"
+        );
     }
-    window.destroy();
+    // Closing hides the existing window without destroying schedules or
+    // stopping the main-loop countdown updates. Reopening must reuse it.
+    let timers = stack.child_by_name("timers").unwrap();
+    let inputs = descendants::<gtk::SpinButton>(&timers);
+    inputs[0].set_value(0.0);
+    inputs[1].set_value(0.0);
+    inputs[2].set_value(5.0);
+    click(&timers, "Start timer");
+    let list = descendants::<gtk::ListBox>(&timers).remove(0);
+    let original_row = list.row_at_index(0).unwrap();
+    window.present();
+    assert!(window.property::<bool>("hide-on-close"));
+    window.close();
+    assert!(!window.is_visible());
+    assert_eq!(app.windows().len(), 1);
+    let context = glib::MainContext::default();
+    let until = std::time::Instant::now() + std::time::Duration::from_millis(1200);
+    while std::time::Instant::now() < until {
+        while context.pending() {
+            context.iteration(false);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        descendants::<gtk::Label>(&original_row)
+            .iter()
+            .any(|label| { label.has_css_class("countdown") && label.text() != "00:05" }),
+        "countdowns continue while hidden"
+    );
+    app.activate_action("show", None);
+    assert!(window.is_visible());
+    assert_eq!(app.windows().len(), 1);
+    assert_eq!(list.row_at_index(0).unwrap(), original_row);
+
+    let file = descendants::<gtk::MenuButton>(&window)
+        .into_iter()
+        .find(|button| button.label().as_deref() == Some("File"))
+        .unwrap();
+    assert!(file.menu_model().is_some());
+    assert!(app.has_action("quit"));
+    app.activate_action("quit", None);
+    assert!(app.windows().is_empty());
 }

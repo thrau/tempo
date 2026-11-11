@@ -19,7 +19,12 @@ fn button(icon: &str, tooltip: &str) -> gtk::Button {
         .tooltip_text(tooltip)
         .build()
 }
-fn panel(title: &str, subtitle: &str, empty: &str) -> (gtk::Widget, gtk::Box, gtk::ListBox) {
+fn panel(
+    title: &str,
+    subtitle: &str,
+    empty: &str,
+    creation_label: Option<&str>,
+) -> (gtk::Widget, gtk::Box, gtk::ListBox) {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 20);
     content.set_margin_top(24);
     content.set_margin_bottom(24);
@@ -34,7 +39,18 @@ fn panel(title: &str, subtitle: &str, empty: &str) -> (gtk::Widget, gtk::Box, gt
     let form = gtk::Box::new(gtk::Orientation::Vertical, 12);
     form.add_css_class("card");
     form.add_css_class("composer");
-    content.append(&form);
+    let expander = creation_label.map(|title| {
+        let expander = gtk::Expander::builder()
+            .label(title)
+            .expanded(true)
+            .child(&form)
+            .build();
+        content.append(&expander);
+        expander
+    });
+    if expander.is_none() {
+        content.append(&form);
+    }
     let list = gtk::ListBox::new();
     list.set_selection_mode(gtk::SelectionMode::None);
     list.add_css_class("boxed-list");
@@ -45,6 +61,30 @@ fn panel(title: &str, subtitle: &str, empty: &str) -> (gtk::Widget, gtk::Box, gt
     placeholder.set_wrap(true);
     list.set_placeholder(Some(&placeholder));
     content.append(&list);
+    if let Some(expander) = expander {
+        let weak_expander = expander.downgrade();
+        let children = list.observe_children();
+        let handler = children.connect_items_changed(move |children, _, _, added| {
+            if let Some(expander) = weak_expander.upgrade() {
+                let has_rows = children
+                    .iter::<glib::Object>()
+                    .any(|child| child.is_ok_and(|widget| widget.is::<gtk::ListBoxRow>()));
+                if !has_rows {
+                    expander.set_expanded(true);
+                } else if added > 0 {
+                    expander.set_expanded(false);
+                }
+            }
+        });
+        // GTK only weakly caches this model. Retain it until the expander is
+        // destroyed, then disconnect the observer as part of widget cleanup.
+        let handler = RefCell::new(Some(handler));
+        expander.connect_destroy(move |_| {
+            if let Some(handler) = handler.borrow_mut().take() {
+                children.disconnect(handler);
+            }
+        });
+    }
     let clamp = adw::Clamp::builder()
         .maximum_size(620)
         .child(&content)
@@ -152,6 +192,7 @@ pub fn alarms(notifier: Notifier) -> gtk::Widget {
         "Alarms",
         "A gentle reminder, right on time.",
         "No alarms yet. Make time for something.",
+        None,
     );
     let entry = name_entry("Name (optional)");
     form.append(&label("Time", "heading"));
@@ -408,12 +449,14 @@ pub fn timers(notifier: Notifier, cycles: bool) -> gtk::Widget {
             "Cycles",
             "Find your rhythm. Focus, rest, repeat.",
             "Your next focus session starts here.",
+            Some("New cycle"),
         )
     } else {
         panel(
             "Timers",
             "A little space for the things that take time.",
             "No timers running. Start one above.",
+            Some("New timer"),
         )
     };
     let entry = name_entry(if cycles {
