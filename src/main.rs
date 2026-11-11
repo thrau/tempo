@@ -2,10 +2,14 @@
 
 mod application;
 mod config;
+#[cfg(test)]
+mod ui_tests;
 mod window;
 
-// Feature skeletons (Clocks-like): implementations come later.
 pub mod alarm;
+mod cycle;
+mod notifications;
+mod panels;
 pub mod stopwatch;
 pub mod timer;
 
@@ -23,7 +27,18 @@ fn main() -> glib::ExitCode {
     // Register the GResource that embeds our UI/CSS so GtkBuilder can find them.
     gio::resources_register_include!("tempo.gresource").expect("Failed to register resources.");
 
-    // Run the application.
     let app = TempoApplication::new();
+    app.connect_startup(|_| {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_resource("/org/example/Tempo/style.css");
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+    });
+    // Run the application.
     app.run()
 }

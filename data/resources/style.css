@@ -1,5 +1,13 @@
-/* Application-wide stylesheet (Adwaita). Add custom styling here later. */
-
-window.tempo {
-    /* Reserved for app-specific styling. */
+/* Let Adwaita supply native light/dark colors, controls, and focus rings. */
+window.tempo .composer { padding: 18px; }
+window.tempo .schedule { padding: 16px 18px; }
+window.tempo .countdown {
+    font-size: 36px;
+    font-weight: 300;
+    font-feature-settings: "tnum";
+    letter-spacing: 1px;
+}
+window.tempo row.triggered {
+    background-color: alpha(@accent_bg_color, 0.13);
+    box-shadow: inset 3px 0 @accent_bg_color;
 }

@@ -1,8 +1,7 @@
 //! `GtkApplication`/`AdwApplication` lifecycle handling.
 
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
 use adw::subclass::prelude::*;
+use gtk::prelude::*;
 
 use crate::config;
 
@@ -23,6 +22,14 @@ impl ObjectImpl for TempoApplication {
         let app = self.obj();
         app.set_application_id(Some(config::APP_ID));
         app.set_resource_base_path(Some(config::RESOURCE_BASE_PATH));
+        let show = gio::SimpleAction::new("show", None);
+        let weak = app.downgrade();
+        show.connect_activate(move |_, _| {
+            if let Some(app) = weak.upgrade() {
+                app.show_window();
+            }
+        });
+        app.add_action(&show);
     }
 }
 

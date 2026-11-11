@@ -3,5 +3,6 @@
   <gresource prefix="/org/example/Tempo">
     <file preprocess="xml-stripblanks">window.ui</file>
     <file>style.css</file>
+    <file>chime.wav</file>
   </gresource>
 </gresources>
