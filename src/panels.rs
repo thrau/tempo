@@ -1,10 +1,8 @@
 //! Small native GTK panels; each row owns its session-only schedule.
-use crate::{
-    alarm::Alarm, cycle::Cycle, notifications::Notifier, storage, timer::Timer,
-};
+use crate::{alarm::Alarm, cycle::Cycle, notifications::Notifier, storage, timer::Timer};
 use adw::prelude::*;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -180,7 +178,7 @@ fn row(
     list: &gtk::ListBox,
     title: &str,
     on_delete: Option<Box<dyn Fn() + 'static>>,
-) -> (gtk::ListBoxRow, gtk::Box) {
+) -> (gtk::ListBoxRow, gtk::Box, gtk::Box) {
     let row = gtk::ListBoxRow::new();
     row.set_activatable(false);
     let content = gtk::Box::new(gtk::Orientation::Vertical, 10);
@@ -206,7 +204,7 @@ fn row(
             on_delete();
         }
     });
-    (row, content)
+    (row, content, header)
 }
 
 pub fn alarms(notifier: Notifier, store: storage::Store) -> gtk::Widget {
@@ -277,7 +275,7 @@ fn add_alarm_row(
     let title = config.name.clone();
     let id = config.id;
     let delete_store = store.clone();
-    let (row, content) = row(
+    let (row, content, _) = row(
         list,
         &title,
         Some(Box::new(move || delete_store.remove_alarm(id))),
@@ -374,6 +372,15 @@ impl Countdown {
             Self::Cycle(c) => c.remaining(now),
         }
     }
+    fn duration(&self) -> Duration {
+        match self {
+            Self::Timer(t) => t.duration,
+            Self::Cycle(c) => match c.phase {
+                crate::cycle::Phase::Focus => c.focus,
+                crate::cycle::Phase::Break => c.break_time,
+            },
+        }
+    }
     fn start(&mut self, now: Instant) {
         match self {
             Self::Timer(t) => t.start(now),
@@ -428,8 +435,92 @@ fn format_duration(duration: Duration) -> String {
         format!("{:02}:{:02}", seconds / 60, seconds % 60)
     }
 }
-fn refresh(model: &Countdown, clock: &gtk::Label, status: &gtk::Label, toggle: &gtk::Button) {
-    clock.set_text(&format_duration(model.remaining(Instant::now())));
+/// A native label over a Cairo ring; keep the time selectable by accessibility
+/// tools rather than painting the text into the drawing area.
+#[derive(Clone)]
+struct CountdownDisplay {
+    widget: gtk::Overlay,
+    clock: gtk::Label,
+    ring: gtk::DrawingArea,
+    fraction: Rc<Cell<f64>>,
+}
+impl CountdownDisplay {
+    fn new() -> Self {
+        let fraction = Rc::new(Cell::new(0.0));
+        let ring = gtk::DrawingArea::builder()
+            .content_width(168)
+            .content_height(168)
+            .can_target(false)
+            .build();
+        let progress = fraction.clone();
+        ring.set_draw_func(move |area, cr, width, height| {
+            let center_x = f64::from(width) / 2.0;
+            let center_y = f64::from(height) / 2.0;
+            let radius = f64::from(width.min(height).min(168)) / 2.0 - 20.0;
+            if radius <= 0.0 {
+                return;
+            }
+            let style = area.style_context();
+            let foreground = style.color();
+            let accent = style.lookup_color("accent_color").unwrap_or(foreground);
+            let start = -std::f64::consts::FRAC_PI_2;
+            let full_circle = std::f64::consts::TAU;
+            cr.set_line_width(10.0);
+            cr.set_source_rgba(
+                foreground.red().into(),
+                foreground.green().into(),
+                foreground.blue().into(),
+                f64::from(foreground.alpha()) * 0.12,
+            );
+            cr.arc(center_x, center_y, radius, 0.0, full_circle);
+            let _ = cr.stroke();
+            let elapsed = progress.get();
+            if elapsed > 0.0 {
+                cr.set_line_cap(gtk::cairo::LineCap::Round);
+                cr.set_source_rgba(
+                    accent.red().into(),
+                    accent.green().into(),
+                    accent.blue().into(),
+                    accent.alpha().into(),
+                );
+                cr.arc(
+                    center_x,
+                    center_y,
+                    radius,
+                    start,
+                    start + full_circle * elapsed,
+                );
+                let _ = cr.stroke();
+            }
+        });
+        let clock = label("", "countdown");
+        clock.add_css_class("dial-time");
+        clock.set_xalign(0.5);
+        clock.set_halign(gtk::Align::Center);
+        clock.set_valign(gtk::Align::Center);
+        let widget = gtk::Overlay::new();
+        widget.set_halign(gtk::Align::Start);
+        widget.set_valign(gtk::Align::Center);
+        widget.set_child(Some(&ring));
+        widget.add_overlay(&clock);
+        Self {
+            widget,
+            clock,
+            ring,
+            fraction,
+        }
+    }
+
+    fn update(&self, model: &Countdown, now: Instant) {
+        let remaining = model.remaining(now);
+        self.clock.set_text(&format_duration(remaining));
+        self.fraction
+            .set((1.0 - remaining.as_secs_f64() / model.duration().as_secs_f64()).clamp(0.0, 1.0));
+        self.ring.queue_draw();
+    }
+}
+fn refresh(model: &Countdown, clock: &CountdownDisplay, status: &gtk::Label, toggle: &gtk::Button) {
+    clock.update(model, Instant::now());
     status.set_text(&model.status());
     toggle.set_icon_name(if model.running() {
         "media-playback-pause-symbolic"
@@ -451,18 +542,30 @@ fn countdown_row(
 ) {
     model.start(Instant::now());
     let model = Rc::new(RefCell::new(model));
-    let (row, content) = row(list, &title, on_delete);
-    let clock = label("", "countdown");
-    content.append(&clock);
+    let (row, content, header) = row(list, &title, on_delete);
+    // Countdown cards share one horizontal row instead of reserving a
+    // full-width header above the dial. Alarm cards keep their own header.
+    content.remove(&header);
+    let body = gtk::Box::new(gtk::Orientation::Horizontal, 24);
+    let clock = CountdownDisplay::new();
+    body.append(&clock.widget);
+    let details = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    details.set_hexpand(true);
+    details.set_valign(gtk::Align::Center);
+    details.append(&header);
     let status = label("", "dim-label");
     status.set_wrap(true);
-    content.append(&status);
+    details.append(&status);
     let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    controls.set_halign(gtk::Align::Start);
+    controls.set_margin_top(8);
     let toggle = button("media-playback-pause-symbolic", "Pause");
     let reset = button("view-refresh-symbolic", "Reset");
     controls.append(&toggle);
     controls.append(&reset);
-    content.append(&controls);
+    details.append(&controls);
+    body.append(&details);
+    content.append(&body);
     refresh(&model.borrow(), &clock, &status, &toggle);
     let m = model.clone();
     let c = clock.clone();

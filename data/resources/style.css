@@ -16,6 +16,8 @@ window.tempo .countdown {
     font-feature-settings: "tnum";
     letter-spacing: 1px;
 }
+/* Leave room for hour-long countdowns inside the compact dial. */
+window.tempo .countdown.dial-time { font-size: 28px; }
 window.tempo row.triggered {
     background-color: alpha(@accent_bg_color, 0.13);
     box-shadow: inset 3px 0 @accent_bg_color;

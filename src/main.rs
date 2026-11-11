@@ -12,8 +12,8 @@ pub mod alarm;
 mod cycle;
 mod notifications;
 mod panels;
-pub mod storage;
 pub mod stopwatch;
+pub mod storage;
 pub mod timer;
 
 use gtk::prelude::*;

@@ -159,7 +159,24 @@ fn native_window_create_pause_reset_delete() {
             input.set_value(1.0);
         }
         click(&panel, action);
-        assert!(list.row_at_index(0).is_some());
+        let first = list.row_at_index(0).unwrap();
+        // The title/delete header belongs beside the ring, not in a separate
+        // full-width row above it. Status and controls stay below that header.
+        let content = first.child().unwrap();
+        let body = content.first_child().unwrap();
+        assert!(body.next_sibling().is_none());
+        let dial = body.first_child().unwrap();
+        assert!(dial.is::<gtk::Overlay>());
+        let details = dial.next_sibling().unwrap();
+        let header = details.first_child().unwrap();
+        assert!(header.first_child().unwrap().has_css_class("heading"));
+        assert!(descendants::<gtk::Button>(&header)
+            .iter()
+            .any(|button| button.tooltip_text().as_deref() == Some("Delete")));
+        let status = header.next_sibling().unwrap();
+        assert!(status.has_css_class("dim-label"));
+        let controls = status.next_sibling().unwrap();
+        assert_eq!(descendants::<gtk::Button>(&controls).len(), 2);
         assert!(
             !expander.is_expanded(),
             "creating an item collapses the form"
