@@ -52,6 +52,44 @@ fn native_window_create_pause_reset_delete() {
         .into_iter()
         .find(|s| s.child_by_name("alarms").is_some())
         .unwrap();
+    // All schedule pages use the same width and composer/list alignment, even
+    // though their controls have different minimum widths.
+    stack.set_transition_type(gtk::StackTransitionType::None);
+    window.present();
+    for width in [480, 640, 900] {
+        window.set_default_size(width, 660);
+        let mut expected = None;
+        for page in ["alarms", "timers", "cycles"] {
+            stack.set_visible_child_name(page);
+            let context = glib::MainContext::default();
+            let until = std::time::Instant::now() + std::time::Duration::from_millis(150);
+            while std::time::Instant::now() < until {
+                while context.pending() {
+                    context.iteration(false);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let panel = stack.child_by_name(page).unwrap();
+            let clamp = descendants::<adw::Clamp>(&panel).remove(0);
+            let entry = descendants::<gtk::Entry>(&panel).remove(0);
+            let form = entry.parent().unwrap();
+            let list = descendants::<gtk::ListBox>(&panel).remove(0);
+            let expander = descendants::<gtk::Expander>(&panel).remove(0);
+            assert!(expander.is_expanded());
+            assert_eq!(expander.child().unwrap(), form);
+            let sizes = (clamp.child().unwrap().width(), form.width(), list.width());
+            assert!(sizes.0 > 0 && sizes.1 > 0 && sizes.2 > 0);
+            if let Some(expected) = expected {
+                assert_eq!(
+                    sizes, expected,
+                    "{page}: aligned widths at window width {width}"
+                );
+            } else {
+                expected = Some(sizes);
+            }
+        }
+    }
+    stack.set_visible_child_name("alarms");
     // Names are secondary: all time/duration inputs must precede the entry.
     for page in ["alarms", "timers", "cycles"] {
         let panel = stack.child_by_name(page).unwrap();
@@ -78,13 +116,22 @@ fn native_window_create_pause_reset_delete() {
     let alarms = stack.child_by_name("alarms").unwrap();
     click(&alarms, "Add alarm");
     let list = descendants::<gtk::ListBox>(&alarms).remove(0);
+    let expander = descendants::<gtk::Expander>(&alarms).remove(0);
     assert!(list.row_at_index(0).is_some());
+    assert!(
+        !expander.is_expanded(),
+        "creating an alarm collapses the form"
+    );
     let enabled = descendants::<gtk::Switch>(&list).remove(0);
     enabled.set_active(false);
     enabled.set_active(true);
     assert!(enabled.is_active());
     icon_click(&list, "Delete");
     assert!(list.row_at_index(0).is_none());
+    assert!(
+        expander.is_expanded(),
+        "deleting the last alarm reopens the form"
+    );
 
     for (page, action) in [("timers", "Start timer"), ("cycles", "Start cycle")] {
         let panel = stack.child_by_name(page).unwrap();

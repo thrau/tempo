@@ -93,6 +93,8 @@ fn panel(
     }
     let clamp = adw::Clamp::builder()
         .maximum_size(620)
+        // Keep the clamp independent of each page's minimum content width.
+        .tightening_threshold(620)
         .child(&content)
         .build();
     let scroll = gtk::ScrolledWindow::builder()
@@ -205,7 +207,7 @@ pub fn alarms(notifier: Notifier, store: storage::Store) -> gtk::Widget {
         "Alarms",
         "A gentle reminder, right on time.",
         "No alarms yet. Make time for something.",
-        None,
+        Some("New alarm"),
         None,
     );
     let entry = name_entry("Name (optional)");
@@ -510,12 +512,17 @@ pub fn timers(notifier: Notifier, store: storage::Store, cycles: bool) -> gtk::W
     let quick: Option<gtk::Widget> = if cycles {
         None
     } else {
-        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        row.set_halign(gtk::Align::Center);
+        let row = gtk::FlowBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .column_spacing(8)
+            .row_spacing(8)
+            .homogeneous(true)
+            .max_children_per_line(6)
+            .build();
         for minutes in [3u64, 5, 10, 15, 30, 50] {
             let button = gtk::Button::with_label(&format!("{minutes} min"));
             button.set_tooltip_text(Some(&format!("Start a {minutes} minute timer")));
-            row.append(&button);
+            row.insert(&button, -1);
             quick_buttons.push((button, minutes));
         }
         Some(row.upcast())
