@@ -113,6 +113,24 @@ requires an X11 display.
 
 ### Packaging (optional)
 
+To build a Debian package manually, install `cargo-deb` once:
+
+```bash
+cargo install cargo-deb --locked
+```
+
+Then, from the project root on Debian / Ubuntu / Mint with the prerequisites
+above installed, run:
+
+```bash
+cargo deb
+```
+
+This builds the release binary and creates a `.deb` in `target/debian/` for the
+current version in `Cargo.toml` and the host architecture. No Git tag is needed.
+
+Alternatively, to build and install with Meson:
+
 ```bash
 meson setup _build
 meson compile -C _build

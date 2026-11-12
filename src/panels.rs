@@ -483,12 +483,12 @@ impl CountdownDisplay {
                     accent.blue().into(),
                     accent.alpha().into(),
                 );
-                cr.arc(
+                cr.arc_negative(
                     center_x,
                     center_y,
                     radius,
                     start,
-                    start + full_circle * elapsed,
+                    start - full_circle * elapsed,
                 );
                 let _ = cr.stroke();
             }
