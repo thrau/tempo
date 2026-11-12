@@ -3,8 +3,8 @@ name = "tempo"
 version = "0.1.0"
 edition = "2021"
 description = "A simple timer, alarm and stopwatch app for GNOME (like GNOME Clocks)"
-license = "GPL-3.0-or-later"
-authors = ["Your Name <you@example.com>"]
+license = "GPL-3"
+authors = ["Thomas Rausch <thomas@thrau.at>"]
 default-run = "tempo"
 
 [dependencies]
