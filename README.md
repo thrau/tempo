@@ -14,6 +14,8 @@ your desktop.
   schedule its next occurrence; the scheduled date is shown below it.
 - **Timers:** create named countdowns with hours, minutes, and seconds. Pause,
   resume, reset, restart completed timers, or delete them independently.
+- **Stopwatch:** measure elapsed time with monotonic start/pause/resume controls,
+  lap recording, and reset.
 - **Cycles:** name a repeating focus/break routine (for example, “One Pomodoro”
   with 25 minutes of focus and 5 minutes of rest). Each phase transition alerts
   you, and the cycle keeps repeating until paused or deleted. Reset returns it
@@ -109,7 +111,7 @@ requires an X11 display.
 - `src/tray_x11.rs`: legacy XEmbed icon and popup menu fallback.
 - `src/window/`, `src/application/`: GTK/Adwaita window and app lifecycle.
 - `data/resources/`: window template, styling, and original synthesized chime.
-- `src/stopwatch.rs`: reserved skeleton, not currently exposed in the UI.
+- `src/stopwatch.rs`: stopwatch model and GTK panel.
 
 ### Packaging (optional)
 

@@ -10,6 +10,14 @@ window.tempo .composer-expander .title {
     font-weight: 600;
 }
 window.tempo .schedule { padding: 16px 18px; }
+window.tempo .stopwatch-display {
+    font-size: 64px;
+    font-weight: 300;
+    font-feature-settings: "tnum";
+    letter-spacing: 2px;
+    margin-top: 24px;
+    margin-bottom: 24px;
+}
 window.tempo .countdown {
     font-size: 36px;
     font-weight: 300;

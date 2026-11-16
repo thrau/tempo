@@ -58,6 +58,32 @@ fn native_window_create_pause_reset_delete() {
         .into_iter()
         .find(|s| s.child_by_name("alarms").is_some())
         .unwrap();
+    // Stopwatch surfaces must be siblings, not nested boxed cards (which
+    // would leave an extra shadow below the controls even with no laps).
+    stack.set_visible_child_name("stopwatch");
+    let stopwatch = stack.child_by_name("stopwatch").unwrap();
+    let clamp = descendants::<adw::Clamp>(&stopwatch).remove(0);
+    assert_eq!(clamp.maximum_size(), 620);
+    assert_eq!(clamp.tightening_threshold(), 620);
+    let cards = descendants::<gtk::ListBox>(&stopwatch);
+    assert_eq!(cards.len(), 2);
+    assert_eq!(cards[0].parent(), cards[1].parent());
+    assert!(!cards[0].row_at_index(0).unwrap().is_activatable());
+    assert!(!cards[1].property::<bool>("visible"));
+    click(&stopwatch, "Start");
+    click(&stopwatch, "Lap");
+    assert!(cards[1].property::<bool>("visible"));
+    assert!(cards[1].row_at_index(0).is_some());
+    click(&stopwatch, "Pause");
+    assert!(!descendants::<gtk::Button>(&stopwatch)
+        .iter()
+        .find(|button| button.label().as_deref() == Some("Pause"))
+        .unwrap()
+        .is_sensitive());
+    click(&stopwatch, "Reset");
+    assert!(!cards[1].property::<bool>("visible"));
+    assert!(cards[1].row_at_index(0).is_none());
+
     // All schedule pages use the same width and composer/list alignment, even
     // though their controls have different minimum widths.
     stack.set_transition_type(gtk::StackTransitionType::None);

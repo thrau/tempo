@@ -30,6 +30,11 @@ impl TempoWindow {
             "Timers",
         );
         imp.pages.add_titled(
+            &crate::stopwatch::build_panel(),
+            Some("stopwatch"),
+            "Stopwatch",
+        );
+        imp.pages.add_titled(
             &crate::panels::timers(notifier, store, true),
             Some("cycles"),
             "Cycles",
